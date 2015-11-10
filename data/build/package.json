@@ -1,0 +1,12 @@
+{
+  "name": "esp-minify",
+  "version": "1.0.0",
+  "description": "Minifies JS and CSS files to run Duet web interface on ESP8266.",
+  "main": "minify.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Tony Bukreev (Toxuin)",
+  "license": "GPL-2.0",
+  "dependencies": { "uglify-js" : ">=2.5.0", "uglifycss" : ">=0.0.18", "gzipme": ">=0.0.9"}
+}
