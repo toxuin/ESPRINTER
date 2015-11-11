@@ -10,6 +10,8 @@ MDNSResponder mdns;
 ESP8266WebServer server(80);
 String lastResponse;
 String serialData;
+String fileUploading = "";
+String lastUploadedFile = "";
 
 void setup() {
   Serial.begin(115200);
@@ -67,7 +69,8 @@ void setup() {
         
         EEPROM.put(0, ssid);
         EEPROM.put(32, pass);
-        server.send(200, "text/html", F("<h1>All set!</h1><br /><p>Will now reboot.</p>"));
+        EEPROM.commit();
+        server.send(200, "text/html", F("<h1>All set!</h1><br /><p>(Please reboot me.)</p>"));
         Serial.println("M117 SSID: " + String(ssid) + ", PASS: " + String(pass));
         delay(50);
         ESP.restart();
@@ -96,6 +99,16 @@ void setup() {
   server.on("/rr_files", handleFiles);
   server.on("/rr_gcode", handleGcode);
   server.on("/rr_config", handleConfig);
+  server.on("/rr_upload_begin", handleUploadStart);
+  server.on("/rr_upload", handleUploadData);
+  server.on("/rr_upload_end", handleUploadEnd);
+  server.on("/rr_upload_cancel", handleUploadCancel);
+  server.on("/rr_delete", handleDelete);
+  server.on("/rr_fileinfo", handleFileinfo);
+
+  // UNSUPPORTED STUFF
+  server.on("/rr_mkdir", handleUnsupported);
+  server.on("/rr_move", handleUnsupported);
   server.begin();
 }
 
@@ -178,6 +191,7 @@ void handleFiles() {
   if (server.args() > 0) {
     dir = server.arg(0);
   }
+  urldecode(dir);
   Serial.println("M20 S2 P" + dir);
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
@@ -189,8 +203,11 @@ void handleGcode() {
   String gcode = "";
   if (server.args() > 0) {
     gcode = server.arg(0);
-    urldecode(gcode);
+  } else {
+    server.send(500, "application/json", "{\"err\":\"ERROR 500: EMPTY COMMAND\"}");
+    return;
   }
+  urldecode(gcode);
   Serial.println(gcode);
   server.send(200, "application/json", F("{\"buff\": 16}"));
 }
@@ -203,10 +220,110 @@ void handleConfig() {
   server.send(200, "application/json", lastResponse);
 }
 
+void handleUploadStart() {
+  if (server.args() > 0) {
+    fileUploading = server.arg(0);
+    lastUploadedFile = server.arg(0);
+  } else {
+    server.send(500, "application/json", "{\"err\":\"ERROR 500: PLEASE SPECIFY FILENAME\"}");
+    return;
+  }
+  urldecode(fileUploading);
+  urldecode(lastUploadedFile);
+  // TODO: CHECK FOR VALID SERVER RESPONSE!!!! IMPORTANT!
+  Serial.println("M575 P1 B460800 S0"); // CHANGE BAUDRATE ON 3DPRINTER
+  Serial.flush();
+  delay(200);
+  Serial.end();
+  delay(200);
+  Serial.begin(460800);
+  delay(200);
+  Serial.flush();
+  Serial.println("M28 " + fileUploading);
+  Serial.flush();
+  server.send(200, "application/json", "{\"err\":0}");
+}
+
+void handleUploadData() {
+  if (fileUploading == "") {
+    server.send(500, "application/json", "{\"err\":\"ERROR 500: NOT UPLOADING FILES!\"}");
+    return;
+  }
+  String data = "";
+  if (server.args() > 0) {
+    data = server.arg(0);
+  } else {
+    server.send(500, "application/json", "{\"err\":\"ERROR 500: NO DATA RECEIVED\"}");
+    return;
+  }
+  urldecode(data);
+  Serial.println(data);
+  Serial.flush();
+  server.send(200, "application/json", "{\"err\":0}");
+}
+
+void handleUploadEnd() {
+  if (fileUploading == "") {
+    server.send(500, "application/json", "{\"err\": \"ERROR 500: NOT UPLOADING ANY FILES\"}");
+    return;
+  }
+  Serial.println("M29 " + fileUploading);
+  Serial.println("M575 P1 B115200 S0"); // CHANGE BAUDRATE ON 3DPRINTER
+  Serial.flush();
+  delay(200);
+  Serial.end();
+  delay(200);
+  Serial.begin(115200);
+  delay(200);
+  Serial.flush();
+  fileUploading = "";
+  server.send(200, "application/json", "{\"err\":0}");
+}
+
+void handleUploadCancel() {
+  // IS SENT AFTER UPLOAD END
+  Serial.println("M30 " + lastUploadedFile);
+  server.send(200, "application/json", "{\"err\":0}");
+}
+
+void handleDelete() {
+  String fileName = "";
+  if (server.args() > 0) {
+    fileName = server.arg(0);
+  } else {
+    server.send(500, "application/json", "{\"err\": \"ERROR 500: NO FILENAME PROVIDED\"}");
+    return;
+  }
+  urldecode(fileName);
+  Serial.println("M30 " + fileName);
+  server.send(200, "application/json", "{\"err\":0}");
+}
+
+void handleFileinfo() {
+  String fileName = "";
+  if (server.args() > 0) {
+    fileName = server.arg(0);
+    urldecode(fileName);
+  }
+  if (fileName == "") {
+    Serial.println("M36");
+  } else {
+    Serial.println("M36 " + fileName);
+  }
+  Serial.setTimeout(5000);
+  serialData = Serial.readStringUntil('\n');
+  lastResponse = String(serialData);
+  server.send(200, "application/json", lastResponse);
+}
 
 
 
 
+
+
+void handleUnsupported() {
+  server.send(200, "application/json", F("{\"err\":\"Unsupported operation :(\"}"));
+}
 
 void send404() {
   /*Serial.print("ERROR 404:");
@@ -224,11 +341,11 @@ void send404() {
 }
 
 void send500(String errorMessage) {
-  //Serial.println("ERROR 500: " + server.uri());
   server.send(500, "application/json", "{\"err\": \"500: " + errorMessage + "\"}");
 }
 
 void urldecode(String &input) { // LAL ^_^
+  input.replace("%0A", String('\n'));
   input.replace("%20", " ");
   input.replace("+", " ");
   input.replace("%21", "!");

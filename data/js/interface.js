@@ -9,6 +9,7 @@
 var jsVersion = 1.06;
 var sessionPassword = "reprap";
 var translationWarning = false;		// Set this to "true" if you want to look for missing translation entries
+var blobSize = 64;
 
 /* Constants */
 
@@ -3468,6 +3469,12 @@ var uploadTotalBytes, uploadedTotalBytes;
 var uploadStartTime, uploadRequest, uploadFileSize, uploadFileName, uploadPosition;
 
 function startUpload(type, files) {
+	// Check for the various File API support.
+	if (!window.File || !window.FileReader || !window.Blob) {
+		showMessage("warning-sign", "Browser Can't Do That", "Looks like this browser can't do file uploads. Too bad!", "md");
+		return;
+	}
+
 	// Initialize some values
 	isUploading = true;
 	uploadType = type;
@@ -3506,6 +3513,54 @@ function startUpload(type, files) {
 	setTimeout(function() {
 		uploadNextFile();
 	}, 200);
+}
+
+function sendNextBlob(file, startChar) {
+	// ESP8266 HAS 128 BYTE UART BUFFER
+	if (startChar > file.size) {
+		finishCurrentUpload(true);
+		return;
+	}
+
+	// UPDATE PROGRESSBARS
+	// Calculate current upload speed (Date is based on milliseconds)
+	uploadSpeed = startChar / (((new Date()) - uploadStartTime) / 1000);
+
+	// Update global progress
+	uploadedTotalBytes += blobSize;
+	uploadPosition = startChar;
+
+	var uploadTitle = T("Uploading File(s), {0}% Complete", ((uploadedTotalBytes / uploadTotalBytes) * 100).toFixed(0));
+	if (uploadSpeed > 0) {
+		uploadTitle += " (" + formatSize(uploadSpeed) + "/s)";
+	}
+	$("#modal_upload h4").text(uploadTitle);
+
+	// Update progress bar
+	var progress = ((startChar / file.size) * 100).toFixed(0);
+	uploadRows[0].find(".progress-bar").css("width", progress + "%");
+	uploadRows[0].find(".progress-bar > span").text(progress + " %");
+
+
+	// READ BLOB
+	var reader = new FileReader();
+	reader.onloadend = function(evt) {
+		if (evt.target.readyState == FileReader.DONE) { // DONE == 2
+			if (evt.target.result === "") {
+				finishCurrentUpload(true);
+				return;
+			}
+			$.ajax("rr_upload?data=" + encodeURIComponent(evt.target.result), {
+				dataType: "json",
+				success: function(data) {
+					sendNextBlob(file, startChar + blobSize + 1);
+				}
+			});
+		}
+	};
+
+	var blob = file.slice(startChar, startChar + blobSize);
+	reader.readAsText(blob);
 }
 
 function uploadNextFile() {
@@ -3569,43 +3624,13 @@ function uploadNextFile() {
 	uploadRows[0].find(".glyphicon").removeClass("glyphicon-asterisk").addClass("glyphicon-cloud-upload");
 
 	// Begin another POST file upload
-	uploadRequest = $.ajax("rr_upload?name=" + encodeURIComponent(targetPath), {
-		data: file,
-		dataType: "json",
-		processData: false,
-		contentType: false,
-		type: "POST",
-		success: function(data) {
-			if (isUploading) {
-				finishCurrentUpload(data.err == 0);
-			}
-		},
-		xhr: function() {
-			var xhr = new window.XMLHttpRequest();
-			xhr.upload.addEventListener("progress", function(event) {
-				if (isUploading && event.lengthComputable) {
-					// Calculate current upload speed (Date is based on milliseconds)
-					uploadSpeed = event.loaded / (((new Date()) - uploadStartTime) / 1000);
-
-					// Update global progress
-					uploadedTotalBytes += (event.loaded - uploadPosition);
-					uploadPosition = event.loaded;
-
-					var uploadTitle = T("Uploading File(s), {0}% Complete", ((uploadedTotalBytes / uploadTotalBytes) * 100).toFixed(0));
-					if (uploadSpeed > 0) {
-						uploadTitle += " (" + formatSize(uploadSpeed) + "/s)";
-					}
-					$("#modal_upload h4").text(uploadTitle);
-
-					// Update progress bar
-					var progress = ((event.loaded / event.total) * 100).toFixed(0);
-					uploadRows[0].find(".progress-bar").css("width", progress + "%");
-					uploadRows[0].find(".progress-bar > span").text(progress + " %");
-				}
-			}, false);
-			return xhr;
-		}
+	uploadRequest = $.ajax("rr_upload_begin?name=" + encodeURIComponent(targetPath), {
+		dataType: "json"
 	});
+
+	setTimeout(function() {
+		sendNextBlob(file, 0);
+	}, 200);
 }
 
 function finishCurrentUpload(success) {
@@ -3613,6 +3638,12 @@ function finishCurrentUpload(success) {
 	if (!success) {
 		uploadedTotalBytes += (uploadFileSize - uploadPosition);
 	}
+
+
+	// Notify server that upload done
+	uploadRequest = $.ajax("rr_upload_end", {
+		dataType: "json"
+	});
 
 	// Update glyphicon and progress bar
 	uploadRows[0].find(".glyphicon").removeClass("glyphicon-cloud-upload").addClass(success ? "glyphicon-ok" : "glyphicon-alert");
@@ -3641,6 +3672,10 @@ function cancelUpload() {
 	isUploading = false;
 	finishCurrentUpload(false);
 	finishUpload(false);
+	// Notify server that upload cancelled
+	uploadRequest = $.ajax("rr_upload_cancel" + filename, {
+		dataType: "json"
+	});
 	$("#modal_upload h4").text(T("Upload Cancelled!"));
 	uploadRequest.abort();
 }
