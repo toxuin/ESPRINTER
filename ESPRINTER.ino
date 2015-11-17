@@ -123,6 +123,10 @@ void loop() {
   while (Serial.available() > 0) {
     char character = Serial.read();
     if (character == '\n') {
+      if (serialData.startsWith("ok")) {
+          serialData = "";
+          continue;
+      }
       tcpclient.write(serialData.c_str(), strlen(serialData.c_str()));
       delay(1);
       lastResponse = String(serialData);
@@ -201,6 +205,7 @@ void handleStatus() {
   Serial.println("M408 S" + String(type));
   Serial.setTimeout(5000); // 2s
   serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
   server.send(200, F("application/json"), lastResponse);
 }
@@ -218,6 +223,7 @@ void handleFiles() {
   Serial.println("M20 S2 P" + dir);
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
   server.send(200, "application/json", lastResponse);
 }
@@ -239,6 +245,7 @@ void handleConfig() {
   Serial.println(F("M408 S5"));
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
   server.send(200, "application/json", lastResponse);
 }
@@ -335,6 +342,7 @@ void handleFileinfo() {
   }
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
   server.send(200, "application/json", lastResponse);
 }
