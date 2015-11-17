@@ -8,6 +8,8 @@
 char ssid[32], pass[64];
 MDNSResponder mdns;
 ESP8266WebServer server(80);
+WiFiServer tcp(23);
+WiFiClient tcpclient;
 String lastResponse;
 String serialData;
 String fileUploading = "";
@@ -18,10 +20,10 @@ void setup() {
   delay(20);
   EEPROM.begin(512);
   delay(20);
-  
+
   EEPROM.get(0, ssid);
   EEPROM.get(32, pass);
-  
+
   uint8_t failcount = 0;
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
@@ -40,9 +42,9 @@ void setup() {
          wifiConfigHtml += "<input type=\"radio\" id=\"" + WiFi.SSID(i) + "\"name=\"ssid\" value=\"" + WiFi.SSID(i) + "\" /><label for=\"" + WiFi.SSID(i) + "\">" + WiFi.SSID(i) + "</label><br />";
       }
       wifiConfigHtml += F("<input type=\"password\" name=\"password\" /><br /><input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
-      
+
       Serial.println("M117 FOUND " + String(num_ssids) + " WIFI");
-      
+
       delay(5000);
       DNSServer dns;
       IPAddress apIP(192, 168, 1, 1);
@@ -52,7 +54,7 @@ void setup() {
       Serial.println("M117 WiFi -> ESPrinter");
       dns.setErrorReplyCode(DNSReplyCode::NoError);
       dns.start(53, "*", apIP);
-      
+
       server.on("/", HTTP_GET, [&wifiConfigHtml]() {
         server.send(200, "text/html", wifiConfigHtml);
       });
@@ -66,7 +68,7 @@ void setup() {
           if (server.argName(e) == "password") server.arg(e).toCharArray(pass, 64);//pass = server.arg(e);
           else if (server.argName(e) == "ssid") server.arg(e).toCharArray(ssid, 32);//ssid = server.arg(e);
         }
-        
+
         EEPROM.put(0, ssid);
         EEPROM.put(32, pass);
         EEPROM.commit();
@@ -88,7 +90,7 @@ void setup() {
   if (mdns.begin("esprinter", WiFi.localIP())) {
     MDNS.addService("http", "tcp", 80);
   }
-  
+
   SPIFFS.begin();
 
   server.onNotFound(fsHandler);
@@ -110,22 +112,43 @@ void setup() {
   server.on("/rr_mkdir", handleUnsupported);
   server.on("/rr_move", handleUnsupported);
   server.begin();
+  tcp.begin();
+  tcp.setNoDelay(true);
 }
 
 void loop() {
   server.handleClient();
   delay(1);
-  
+
   while (Serial.available() > 0) {
     char character = Serial.read();
     if (character == '\n') {
-      Serial.println("M117 Serial data: " + serialData);
+      tcpclient.write(serialData.c_str(), strlen(serialData.c_str()));
+      delay(1);
       lastResponse = String(serialData);
       serialData = "";
     } else {
-      Serial.println("M117 serial char: " + character);
       serialData.concat(character);
     }
+  }
+
+  // DISCONNECT ALL IF SOMEONE IS ALLREADY CONNECTED
+  if (tcp.hasClient()) {
+      if (tcpclient && tcpclient.connected()) {
+          WiFiClient otherGuy = tcp.available();
+          otherGuy.stop();
+      } else {
+          tcpclient = tcp.available();
+      }
+  }
+
+  // PUSH FRESH DATA FROM TELNET TO SERIAL
+  if (tcpclient && tcpclient.connected()) {
+      if (tcpclient.available()) {
+        while (tcpclient.available()) {
+            Serial.write(tcpclient.read());
+        }
+      }
   }
 }
 
