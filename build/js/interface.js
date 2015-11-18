@@ -10,7 +10,6 @@ var jsVersion = 1.06;
 var sessionPassword = "reprap";
 var translationWarning = false;		// Set this to "true" if you want to look for missing translation entries
 var blobSize = 64;
-var compatMode = false; // FALSE FOR REPRAPFIRMWARE, TRUE FOR OTHERS
 
 /* Constants */
 
@@ -224,11 +223,6 @@ function postConnect() {
 			getConfigResponse();
 		}, 400);
 	}
-
-	// SET THE INITIAL COMPATMODE
-	setTimeout(function() {
-		getConfigResponse();
-	}, 600);
 
 	$(".btn-connect").removeClass("btn-warning disabled").addClass("btn-success").find("span:not(.glyphicon)").text(T("Disconnect"));
 	$(".btn-connect span.glyphicon").removeClass("glyphicon-transfer").addClass("glyphicon-log-out");
@@ -711,7 +705,6 @@ function getConfigResponse() {
 			} else {
 				$("#configTab").hide();
 			}
-			compatMode = !(response.firmwareName.indexOf("RepRapFirmware") > -1);
 		}
 	});
 }
