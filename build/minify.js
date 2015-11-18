@@ -5,7 +5,7 @@ var gzipme = require('gzipme');
 
 var uglyjs = uglifyjs.minify(["js/jquery-2.1.3.min.js", "js/jquery.cookie.min.js", "js/jquery.flot.min.js",
                             "js/jquery.flot.resize.min.js", "js/jquery.flot.navigate.min.js",  "js/bootstrap.min.js",
-                            "js/bootstrap-slider.min.js", "js/interface.js"]);
+                            "js/bootstrap-slider.min.js", "js/interface.js", "js/line-navigator.js"]);
 
 fs.writeFile("ugly.min.js", uglyjs.code, function(err) {
     if (err) {

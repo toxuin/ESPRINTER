@@ -29,7 +29,7 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     failcount++;
-    if (failcount > 20) { // 1 min
+    if (failcount > 50) { // 1 min
       Serial.println("M117 WIFI ERROR");
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
@@ -107,9 +107,9 @@ void setup() {
   server.on("/rr_upload_cancel", handleUploadCancel);
   server.on("/rr_delete", handleDelete);
   server.on("/rr_fileinfo", handleFileinfo);
-
+  server.on("/rr_mkdir", handleMkdir);
+  
   // UNSUPPORTED STUFF
-  server.on("/rr_mkdir", handleUnsupported);
   server.on("/rr_move", handleUnsupported);
   server.begin();
   tcp.begin();
@@ -253,22 +253,27 @@ void handleConfig() {
 void handleUploadStart() {
   if (server.args() > 0) {
     fileUploading = server.arg(0);
-    lastUploadedFile = server.arg(0);
   } else {
     server.send(500, "application/json", "{\"err\":\"ERROR 500: PLEASE SPECIFY FILENAME\"}");
     return;
   }
+  bool compat = false;
+  if (server.args() > 1) {
+    compat = (server.arg(1) == "true");
+  }
   urldecode(fileUploading);
-  urldecode(lastUploadedFile);
+  lastUploadedFile = fileUploading;
   // TODO: CHECK FOR VALID SERVER RESPONSE!!!! IMPORTANT!
-  Serial.println("M575 P1 B460800 S0"); // CHANGE BAUDRATE ON 3DPRINTER
-  Serial.flush();
-  delay(200);
-  Serial.end();
-  delay(200);
-  Serial.begin(460800);
-  delay(200);
-  Serial.flush();
+  if (!compat) {
+    Serial.println("M575 P1 B460800 S0"); // CHANGE BAUDRATE ON 3DPRINTER
+    Serial.flush();
+    delay(200);
+    Serial.end();
+    delay(200);
+    Serial.begin(460800);
+    delay(200);
+    Serial.flush();
+  }
   Serial.println("M28 " + fileUploading);
   Serial.flush();
   server.send(200, "application/json", "{\"err\":0}");
@@ -297,15 +302,21 @@ void handleUploadEnd() {
     server.send(500, "application/json", "{\"err\": \"ERROR 500: NOT UPLOADING ANY FILES\"}");
     return;
   }
+  bool compat = false;
+  if (server.args() > 0) {
+    compat = (server.arg(0) == "true");
+  }
   Serial.println("M29 " + fileUploading);
-  Serial.println("M575 P1 B115200 S0"); // CHANGE BAUDRATE ON 3DPRINTER
-  Serial.flush();
-  delay(200);
-  Serial.end();
-  delay(200);
-  Serial.begin(115200);
-  delay(200);
-  Serial.flush();
+  if (!compat) {
+    Serial.println("M575 P1 B115200 S0"); // CHANGE BAUDRATE ON 3DPRINTER
+    Serial.flush();
+    delay(200);
+    Serial.end();
+    delay(200);
+    Serial.begin(115200);
+    delay(200);
+    Serial.flush();
+  }
   fileUploading = "";
   server.send(200, "application/json", "{\"err\":0}");
 }
@@ -347,6 +358,21 @@ void handleFileinfo() {
   server.send(200, "application/json", lastResponse);
 }
 
+void handleMkdir() {
+  String dirName = "";
+  if (server.args() < 2 || server.arg(1) != "true") { // 2 ARGS FOR COMPATMODE OR NOPE
+    server.send(200, "application/json", F("{\"err\":\"Unsupported operation :(\"}"));
+    return;
+  }
+  dirName = server.arg(0);
+  urldecode(dirName);
+  if (dirName == "") {
+    server.send(500, "application/json", "{\"err\":\"ERROR 500: NO DIR NAME PROVIDED\"}");
+    return;
+  }
+  Serial.println("M32 " + dirName);
+  server.send(200, "application/json", "{\"err\":0}");
+}
 
 
 

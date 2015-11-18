@@ -10,7 +10,7 @@ Here's some picture to give you an idea what it is:
 
 Setup
 ---
-First, you need an ESP8266 module with at least 2MB (Megabytes) of flash. They aren't all the same, even within same model number.
+First, you need an ESP8266 module with at least 1MB (Megabyte) of flash. They aren't all the same, even within same model number.
 Then, you need to solder it up like this:
 ![ESP improved stability](data/doc/ESP_to_serial.png)
 Yes, you have to heat up the soldering iron and smell some toxic fumes. If you don't want want that – you can buy a pre-soldered board mentioned on [this page](https://github.com/esp8266/Arduino/blob/master/doc/boards.md) but don't forget that it has to have >= 2MB flash.

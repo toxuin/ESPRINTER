@@ -9,7 +9,8 @@
 var jsVersion = 1.06;
 var sessionPassword = "reprap";
 var translationWarning = false;		// Set this to "true" if you want to look for missing translation entries
-var blobSize = 64;
+var blobSize = 10;
+var compatMode = false; // FALSE FOR REPRAPFIRMWARE, TRUE FOR OTHERS
 
 /* Constants */
 
@@ -223,6 +224,11 @@ function postConnect() {
 			getConfigResponse();
 		}, 400);
 	}
+
+	// SET THE INITIAL COMPATMODE
+	setTimeout(function() {
+		getConfigResponse();
+	}, 600);
 
 	$(".btn-connect").removeClass("btn-warning disabled").addClass("btn-success").find("span:not(.glyphicon)").text(T("Disconnect"));
 	$(".btn-connect span.glyphicon").removeClass("glyphicon-transfer").addClass("glyphicon-log-out");
@@ -705,6 +711,7 @@ function getConfigResponse() {
 			} else {
 				$("#configTab").hide();
 			}
+			compatMode = !(response.firmwareName.indexOf("RepRapFirmware") > -1);
 		}
 	});
 }
@@ -1373,7 +1380,8 @@ $("body").on("click", ".btn-macro", function(e) {
 		loadMacroDropdown(directory, dropdown);
 		dropdown.dropdown();
 	} else {
-		sendGCode("M98 P" + $(this).data("macro"));
+		if (!compatMode) sendGCode("M98 P" + $(this).data("macro"));
+		else sendGCode("M23" + $(this).data("macro") + "\nM24");
 	}
 	e.preventDefault();
 });
@@ -1382,16 +1390,14 @@ $("body").on("click", ".btn-print-file, .gcode-file", function(e) {
 	var file = $(this).parents("tr").data("file");
 	showConfirmationDialog(T("Start Print"), T("Do you want to print <strong>{0}</strong>?", file), function() {
 		waitingForPrintStart = true;
-		if (currentGCodeDirectory == "/gcodes") {
-			sendGCode("M23 " + file);
-			setTimeout(function() {
-				sendGCode("M24 " + file);
-			}, 200);
+		if (!compatMode) {
+			if (currentGCodeDirectory == "/gcodes") {
+				sendGCode("M23 " + file + "\nM24 ");
+			} else {
+				sendGCode("M23 " + currentGCodeDirectory.substring(8) + "/" + file + "\nM24");
+			}
 		} else {
-			sendGCode("M23 " + currentGCodeDirectory.substring(8) + "/" + file);
-			setTimeout(function() {
-				sendGCode("M24 " + currentGCodeDirectory.substring(8) + "/" + file);
-			}, 200);
+			sendGCode("M23 " + currentGCodeDirectory + "/" + file + "\nM24");
 		}
 	});
 	e.preventDefault();
@@ -1502,7 +1508,8 @@ $("body").on("click", ".btn-remove-tool", function(e) {
 });
 
 $("body").on("click", ".btn-run-macro", function(e) {
-	sendGCode("M98 P" + currentMacroDirectory + "/" + $(this).parents("tr").data("file"));
+	if (!compatMode) sendGCode("M98 P" + currentMacroDirectory + "/" + $(this).parents("tr").data("file"));
+	else sendGCode("M23" + currentMacroDirectory + "/" + $(this).parents("tr").data("file") + "\nM24");
 	e.preventDefault();
 });
 
@@ -1727,12 +1734,12 @@ $("#btn_clear_log").click(function(e) {
 $("#btn_extrude").click(function(e) {
 	var feedrate = $("#panel_extrude input[name=feedrate]:checked").val() * 60;
 	var amount = $("#panel_extrude input[name=feed]:checked").val();
-	sendGCode("M120\nM83\nG1 E" + amount + " F" + feedrate + "\nM121");
+	sendGCode((compatMode?"":"M120\n") + "M83\nG1 E" + amount + " F" + feedrate + (compatMode?"":"\nM121"));
 });
 $("#btn_retract").click(function(e) {
 	var feedrate = $("#panel_extrude input[name=feedrate]:checked").val() * 60;
 	var amount = $("#panel_extrude input[name=feed]:checked").val();
-	sendGCode("M120\nM83\nG1 E-" + amount + " F" + feedrate + "\nM121");
+	sendGCode((compatMode?"M120\n":"") + "M83\nG1 E-" + amount + " F" + feedrate + (compatMode?"":"\nM121"));
 });
 
 $(".btn-hide-info").click(function() {
@@ -1768,7 +1775,7 @@ $("#mobile_home_buttons button, #btn_homeall, #table_move_head a").click(functio
 			sendGCode("G28 " + $this.data("home"));
 		}
 	} else {
-		var moveString = "M120\nG91\nG1";
+		var moveString = (compatMode?"":"M120\n") + "G91\nG1";
 		if ($this.data("x") != undefined) {
 			moveString += " X" + $this.data("x");
 		}
@@ -1778,7 +1785,7 @@ $("#mobile_home_buttons button, #btn_homeall, #table_move_head a").click(functio
 		if ($this.data("z") != undefined) {
 			moveString += " Z" + $this.data("z");
 		}
-		moveString += " F" + settings.moveFeedrate + "\nM121";
+		moveString += " F" + settings.moveFeedrate + (compatMode?"":"\nM121");
 		sendGCode(moveString);
 	}
 	e.preventDefault();
@@ -1806,7 +1813,7 @@ $("#btn_unload_filament").click(function() {
 
 $("#btn_new_gcode_directory").click(function() {
 	showTextInput(T("New directory"), T("Please enter a name:"), function(value) {
-		$.ajax("rr_mkdir?dir=" + currentGCodeDirectory + "/" + value, {
+		$.ajax("rr_mkdir?dir=" + currentGCodeDirectory + "/" + value + (compatMode?"&compat=true":""), {
 			dataType: "json",
 			success: function(response) {
 				if (response.err == 0) {
@@ -1822,7 +1829,7 @@ $("#btn_new_gcode_directory").click(function() {
 
 $("#btn_new_macro_directory").click(function() {
 	showTextInput(T("New directory"), T("Please enter a name:"), function(value) {
-		$.ajax("rr_mkdir?dir=" + currentMacroDirectory + "/" + value, {
+		$.ajax("rr_mkdir?dir=" + currentMacroDirectory + "/" + value + (compatMode?"&compat=true":""), {
 			dataType: "json",
 			success: function(response) {
 				if (response.err == 0) {
@@ -2672,7 +2679,7 @@ function formatSize(bytes) {
 			return (bytes / 1000).toFixed(1) + " KB";
 		}
 	}
-	return bytes + " B";
+	return bytes.toFixed(0) + " B";
 }
 
 function loadMacroDropdown(directory, dropdown) {
@@ -2707,7 +2714,8 @@ function loadMacroDropdown(directory, dropdown) {
 								}
 
 								$(".macro-file-entry").off("click").click(function(e) {
-									sendGCode("M98 P" + $(this).data("macro"));
+									if (!compatMode) sendGCode("M98 P" + $(this).data("macro"));
+									else sendGCode("M23" + $(this).data("macro") + "\nM24");
 									e.preventDefault();
 								});
 
@@ -2992,7 +3000,7 @@ function setMacroFileItem(row, size) {
 	row.data("file", row.data("macro"));
 	row.removeData("macro");
 
-	var buttons =	'<button class="btn btn-success btn-run-macro btn-sm" title="' + T("Run this macro file (M98)") + '"><span class="glyphicon glyphicon-play"></span></button>';
+	var buttons =	'<button class="btn btn-success btn-run-macro btn-sm" title="' + T("Run this macro file") + '"><span class="glyphicon glyphicon-play"></span></button>';
 	buttons +=		'<button class="btn btn-danger btn-delete-macro btn-sm" title="' + T("Delete this macro") + '"><span class="glyphicon glyphicon-trash"></span></button>';
 	row.children().eq(0).html(buttons);
 
@@ -3528,54 +3536,6 @@ function startUpload(type, files) {
 	}, 200);
 }
 
-function sendNextBlob(file, startChar) {
-	// ESP8266 HAS 128 BYTE UART BUFFER
-	if (startChar > file.size) {
-		finishCurrentUpload(true);
-		return;
-	}
-
-	// UPDATE PROGRESSBARS
-	// Calculate current upload speed (Date is based on milliseconds)
-	uploadSpeed = startChar / (((new Date()) - uploadStartTime) / 1000);
-
-	// Update global progress
-	uploadedTotalBytes += blobSize;
-	uploadPosition = startChar;
-
-	var uploadTitle = T("Uploading File(s), {0}% Complete", ((uploadedTotalBytes / uploadTotalBytes) * 100).toFixed(0));
-	if (uploadSpeed > 0) {
-		uploadTitle += " (" + formatSize(uploadSpeed) + "/s)";
-	}
-	$("#modal_upload h4").text(uploadTitle);
-
-	// Update progress bar
-	var progress = ((startChar / file.size) * 100).toFixed(0);
-	uploadRows[0].find(".progress-bar").css("width", progress + "%");
-	uploadRows[0].find(".progress-bar > span").text(progress + " %");
-
-
-	// READ BLOB
-	var reader = new FileReader();
-	reader.onloadend = function(evt) {
-		if (evt.target.readyState == FileReader.DONE) { // DONE == 2
-			if (evt.target.result === "") {
-				finishCurrentUpload(true);
-				return;
-			}
-			$.ajax("rr_upload?data=" + encodeURIComponent(evt.target.result), {
-				dataType: "json",
-				success: function(data) {
-					sendNextBlob(file, startChar + blobSize + 1);
-				}
-			});
-		}
-	};
-
-	var blob = file.slice(startChar, startChar + blobSize);
-	reader.readAsText(blob);
-}
-
 function uploadNextFile() {
 	// Prepare some upload values
 	var file = uploadFiles[uploadedFileCount];
@@ -3637,12 +3597,50 @@ function uploadNextFile() {
 	uploadRows[0].find(".glyphicon").removeClass("glyphicon-asterisk").addClass("glyphicon-cloud-upload");
 
 	// Begin another POST file upload
-	uploadRequest = $.ajax("rr_upload_begin?name=" + encodeURIComponent(targetPath), {
+	uploadRequest = $.ajax("rr_upload_begin?name=" + encodeURIComponent(targetPath) + (compatMode?"&compat=true":""), {
 		dataType: "json"
 	});
 
+	var reader = new FileNavigator(file);
+	var handler = function(err, index, lines, eof, progress) {
+		if (err) {
+            finishCurrentUpload(false);
+			console.log("Error: " + err);
+            return;
+        }
+		if (lines.length <= 0) { // END OF FILE. eof DOES NOT WORK IN OUR CASE.
+            finishCurrentUpload(true);
+            return;
+        }
+
+		// Update global progress
+		uploadedTotalBytes += lines.join().length;
+		var avgLineLength = lines.join().length / blobSize;
+		uploadPosition = index * avgLineLength;
+		uploadSpeed = uploadPosition / (((new Date()) - uploadStartTime) / 1000);
+
+		var uploadTitle = T("Uploading File(s), {0}% Complete", ((uploadedTotalBytes / uploadTotalBytes) * 100).toFixed(0));
+		if (uploadSpeed > 0) {
+			uploadTitle += " (" + formatSize(uploadSpeed) + "/s)";
+		}
+		$("#modal_upload h4").text(uploadTitle);
+
+		// Update progress bar
+		var progress = ((uploadPosition / file.size) * 100).toFixed(0);
+		uploadRows[0].find(".progress-bar").css("width", progress + "%");
+		uploadRows[0].find(".progress-bar > span").text(progress + " %");
+
+		$.ajax("rr_upload?data=" + encodeURIComponent(lines.join("\n")), {
+			dataType: "json",
+			success: function(data) {
+				reader.readLines(index + lines.length, blobSize, handler);
+			}
+		});
+    };
+
+	// THIS INITS THE TRANSFER
 	setTimeout(function() {
-		sendNextBlob(file, 0);
+		reader.readLines(0, blobSize, handler);
 	}, 200);
 }
 
@@ -3654,7 +3652,7 @@ function finishCurrentUpload(success) {
 
 
 	// Notify server that upload done
-	uploadRequest = $.ajax("rr_upload_end", {
+	uploadRequest = $.ajax("rr_upload_end" + (compatMode?"?compat=true":""), {
 		dataType: "json"
 	});
 
@@ -3686,11 +3684,11 @@ function cancelUpload() {
 	finishCurrentUpload(false);
 	finishUpload(false);
 	// Notify server that upload cancelled
-	uploadRequest = $.ajax("rr_upload_cancel" + filename, {
+	uploadRequest = $.ajax("rr_upload_cancel", {
 		dataType: "json"
 	});
 	$("#modal_upload h4").text(T("Upload Cancelled!"));
-	uploadRequest.abort();
+	//uploadRequest.abort();
 }
 
 function finishUpload(success) {
@@ -3734,19 +3732,19 @@ function uploadHasFinished() {
 	// Deal with different upload types
 	if (uploadType == "print") {
 		waitingForPrintStart = true;
-		if (currentGCodeDirectory == "/gcodes") {
-			setTimeout(function() {
-				sendGCode("M23 " + uploadFileName);
+		if (!compatMode) {
+			if (currentGCodeDirectory == "/gcodes") {
 				setTimeout(function() {
-					sendGCode("M24 " + uploadFileName);
-				}, 200);
-			}, 400);
+					sendGCode("M23 " + uploadFileName + "\nM24");
+				}, 400);
+			} else {
+				setTimeout(function() {
+					sendGCode("M23 " + currentGCodeDirectory.substring(8) + "/" + uploadFileName + "\nM24");
+				}, 400);
+			}
 		} else {
 			setTimeout(function() {
-				sendGCode("M23 " + currentGCodeDirectory.substring(8) + "/" + uploadFileName);
-				setTimeout(function() {
-					sendGCode("M24 " + currentGCodeDirectory.substring(8) + "/" + uploadFileName);
-				}, 200);
+				sendGCode("M23 " + currentGCodeDirectory + "/" + uploadFileName + "\nM24");
 			}, 400);
 		}
 	}
