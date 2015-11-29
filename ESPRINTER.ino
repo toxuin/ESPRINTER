@@ -66,10 +66,12 @@ void setup() {
           return;
         }
         for (uint8_t e = 0; e < server.args(); e++) {
-          if (server.argName(e) == "password") server.arg(e).toCharArray(pass, 64);//pass = server.arg(e);
-          else if (server.argName(e) == "ssid") server.arg(e).toCharArray(ssid, 32);//ssid = server.arg(e);
+          String argument = server.arg(e);
+          urldecode(argument);
+          if (server.argName(e) == "password") argument.toCharArray(pass, 64);//pass = server.arg(e);
+          else if (server.argName(e) == "ssid") argument.toCharArray(ssid, 32);//ssid = server.arg(e);
         }
-
+        
         EEPROM.put(0, ssid);
         EEPROM.put(32, pass);
         EEPROM.commit();
@@ -79,7 +81,7 @@ void setup() {
         ESP.restart();
       });
       server.begin();
-      Serial.println("M117 HTTP://" + WiFi.softAPIP());
+      Serial.println("M117 HTTP://" + WiFi.softAPIP().toString());
       for (;;) { // THIS ONE IS FOR WIFI AP SETTINGS PAGE
         server.handleClient();
         dns.processNextRequest();
@@ -190,7 +192,7 @@ void fsHandler() {
 void handleConnect() {
   // ALL PASSWORDS ARE VALID! YAY!
   // TODO: NO, SERIOUSLY, CONSIDER ADDING AUTH HERE. LATER MB?
-  Serial.println("M117 " + WiFi.localIP());
+  Serial.println("M117 " + WiFi.localIP().toString());
   server.send(200, "application/json", "{\"err\":0}");
 }
 
