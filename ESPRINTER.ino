@@ -25,6 +25,7 @@ void setup() {
   EEPROM.get(32, pass);
 
   uint8_t failcount = 0;
+  WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -122,12 +123,13 @@ void loop() {
 
   while (Serial.available() > 0) {
     char character = Serial.read();
-    if (character == '\n') {
+    if (character == '\n' || character == '\r') {
       if (serialData.startsWith("ok")) {
           serialData = "";
           continue;
       }
       tcpclient.write(serialData.c_str(), strlen(serialData.c_str()));
+      tcpclient.flush();
       delay(1);
       lastResponse = String(serialData);
       serialData = "";
@@ -148,11 +150,11 @@ void loop() {
 
   // PUSH FRESH DATA FROM TELNET TO SERIAL
   if (tcpclient && tcpclient.connected()) {
-      if (tcpclient.available()) {
-        while (tcpclient.available()) {
-            Serial.write(tcpclient.read());
-        }
-      }
+    while (tcpclient.available()) {
+      uint8_t data = tcpclient.read();
+      tcpclient.write(data); // ECHO BACK TO SEE WHATCHA TYPIN
+      Serial.write(data);
+    }
   }
 }
 
@@ -169,7 +171,7 @@ void fsHandler() {
   }
   server.sendHeader("Content-Length", String(dataFile.size()));
   String dataType = "text/plain";
-  if (path.endsWith(".gz")) server.sendHeader(F("Content-Encoding"), "gzip");
+  //if (path.endsWith(".gz")) server.sendHeader(F("Content-Encoding"), "gzip");
   if (path.endsWith(".html")) dataType = F("text/html");
   else if (path.endsWith(".css")) dataType = F("text/css");
   else if (path.endsWith(".js")) dataType = F("application/javascript");
