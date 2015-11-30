@@ -17,7 +17,7 @@ Setup
 First, you need an ESP8266 module with at least 1MB (Megabyte) of flash. They aren't all the same, even within same model number.
 Then, you need to solder it up like this:
 ![ESP improved stability](doc/ESP_to_serial.png)
-Yes, you have to heat up the soldering iron and smell some toxic fumes. If you don't want want that – you can buy a pre-soldered board mentioned on [this page](https://github.com/esp8266/Arduino/blob/master/doc/boards.md) but don't forget that it has to have >= 1MB flash.
+Yes, you have to heat up the soldering iron and smell some toxic fumes. If you don't want that – you can buy a pre-soldered board mentioned on [this page](https://github.com/esp8266/Arduino/blob/master/doc/boards.md) but don't forget that it has to have >= 1MB flash.
 
 Then, you'll need fully functional Arduino IDE for ESP8266. [Arduino for ESP8266](https://github.com/esp8266/Arduino) project has some nice manuals how to set it up. You'll need the **staging** version of their board package, not a stable one!
 
@@ -56,10 +56,35 @@ You can do a pull request and fix those. But unless we have a separate SD on ESP
 
 Thing is – files are uploaded through HTML5 File API at 10 lines per transaction. That's NOT how you should normally transfer files in a computer system, but it works in this case and does not require any extra hardware. Speeds are hilarious: ~3 Kb/s for Repetier and about 30 Kb/s for RepRapFirmware. But it's something! For ~$3 you get a wifi for your printer. Great deal, if you ask me!
 
-Modify
+Updating
+-----------
+
+You can go to Settings and press big blue "Update firmware" button to check if newer firmware is available. If something goes wrong you'll need to be able to perform module reflash over serial port (a.k.a the normal flashing process). But stay cool: it is practically impossible to permanently kill your ESP8266 with wrong flashing actions: you can always completely erase flash and just proceed to the normal firmware upload through the Arduino IDE.
+
+Currently update server is hosted on my old laptop and is as unstable as my home internet connection. To host your own update server use the PHP script provided in the build/server folder.
+
+If your module operates in an environment without an Internet connection, you can update it with just supplying a file. Open http://your_esprinter_ip/update and select the file. You can either pre-download firmware files from my old laptop server, or create your own.
+
+To create a binary firmware file from your Arduino sketch + SPIFFS image you need to use [esptool.py](https://github.com/themadinventor/esptool):
+
+     esptool.py make_image -f ESPRINTER.cpp.bin -a 0x000000 -f ESPRINTER.spiffs.bin -a 0x30000 output_file_name.bin
+
+You have to know the SPIFFS offset for your module though (sketch offset is always 0x000000). It can be located at boards.txt in your Arduino15 folder inside esp8266 subfolder, but if that's too much hassle – here, I've made you a table:
+
+| Chip size | SPIFFS Size | SPIFFS offset |
+|-----------|-------------|---------------|
+| 1 Mb      | 512Kb       | 0x7B000       |
+| 2 Mb      | 1Mb         | 0x100000      |
+| 4 Mb      | 1Mb         | 0x300000      |
+
+Needed files (ESPRINTER.cpp.bin and ESPRINTER.spiffs.bin) would be generated once you click at "Compile" and "ESP8266 Sketch data upload" in Arduino IDE – even if no module if actually connected. They would be located in some weird tmp folder – check your IDE console log.
+
+Modify the UI
 ----
 
-You need to have node.js installed to minify your js and css. Do the
+Just edit files in build directory as you like.
+
+You need to have node.js installed to minify js and css. Do the
 
      cd build
      npm install
