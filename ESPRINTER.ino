@@ -2,12 +2,17 @@
 #include <ESP8266mDNS.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266httpUpdate.h>
+#include <ESP8266HTTPUpdateServer.h>
 #include <EEPROM.h>
 #include <FS.h>
+
+#define ESPRINTER_VERSION "1"
 
 char ssid[32], pass[64];
 MDNSResponder mdns;
 ESP8266WebServer server(80);
+ESP8266HTTPUpdateServer httpUpdater;
 WiFiServer tcp(23);
 WiFiClient tcpclient;
 String lastResponse;
@@ -90,9 +95,8 @@ void setup() {
     }
   }
 
-  if (mdns.begin("esprinter", WiFi.localIP())) {
-    MDNS.addService("http", "tcp", 80);
-  }
+  MDNS.begin("esprinter");
+  MDNS.addService("http", "tcp", 80);
 
   SPIFFS.begin();
 
@@ -114,6 +118,10 @@ void setup() {
   
   // UNSUPPORTED STUFF
   server.on("/rr_move", handleUnsupported);
+
+  // SYSTEM STUFF
+  server.on("/rr_update", handleRemoteUpdate);
+  httpUpdater.setup(&server);
   server.begin();
   tcp.begin();
   tcp.setNoDelay(true);
@@ -298,7 +306,7 @@ void handleUploadData() {
   urldecode(data);
   Serial.println(data);
   Serial.flush();
-  server.send(200, "application/json", "{\"err\":0}");
+  server.send(200, F("application/json"), "{\"err\":0}");
 }
 
 void handleUploadEnd() {
@@ -375,7 +383,40 @@ void handleMkdir() {
     return;
   }
   Serial.println("M32 " + dirName);
-  server.send(200, "application/json", "{\"err\":0}");
+  server.send(200, F("application/json"), F("{\"err\":0}"));
+}
+
+
+
+void handleRemoteUpdate() {
+  if (server.args() < 2) {
+    server.send(500, F("application/json"), F("{\"err\":\"ERROR 500: wrong update server provided\"}"));
+    return;
+  }
+  String updateServer = server.arg(0);
+  String updateUrl = server.arg(1);
+  urldecode(updateUrl); // ??
+  urldecode(updateServer); // ??
+  if (updateServer == "" || updateUrl == "") {
+    server.send(500, F("application/json"), F("{\"err\":\"ERROR 500: wrong update server provided\"}"));
+    return;
+  }
+  t_httpUpdate_return updateResult = ESPhttpUpdate.update(updateServer, 80, updateUrl, ESPRINTER_VERSION);
+  switch (updateResult) {
+    case HTTP_UPDATE_FAILED:
+      Serial.println(F("M117 ESPRINTER UPDATE ERROR"));
+      server.send(500, F("application/json"), F("{\"err\": \"Update failed\"}"));
+      break;
+
+    case HTTP_UPDATE_NO_UPDATES:
+      server.send(200, F("application/json"), F("{\"err\":\"No updates\"}"));
+      break;
+
+    case HTTP_UPDATE_OK:
+      Serial.println(F("M117 ESPRINTER UPDATED!"));
+      server.send(200, F("application/json"), F("{\"err\":0}"));
+      break;
+  }
 }
 
 

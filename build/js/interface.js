@@ -1857,6 +1857,28 @@ $(".btn-upload").click(function(e) {
 	e.preventDefault();
 });
 
+$(".btn-fwupdate").click(function(e) {
+	showConfirmationDialog(T("Update firmware?"), T("Are you sure you want to update firmware? Will you able to manually reflash module if something goes wrong?"), function() {
+		var updateServer = $("updServer").val();
+		var updateUrl = $("updUrl").val();
+		if (updateUrl === "" || updateServer === "") {
+			showMessage("exclamation-sign", T("Error"), T("Your update server and/or URL seems to be empty."), "md");
+			return;
+		}
+		$.ajax("rr_update?server=" + encodeURIComponent(updateServer) + "&url=" + encodeURIComponent(updateUrl), {
+			dataType: "json",
+			success: function(response) {
+				if (response.err == 0) {
+					showMessage("info-sign", T("Success"), T("Firmware update applied! Module now reboots. Don't forget to refresh this page to use the new version."), "md");
+				} else {
+					showMessage("exclamation-sign", T("Error"), response.err, "md");
+				}
+			}
+		});
+	});
+	e.preventDefault();
+});
+
 $("#btn_reset_settings").click(function(e) {
 	showConfirmationDialog(T("Reset Settings"), T("Are you sure you want to revert to Factory Settings?"), function() {
 		if (defaultSettings.language != settings.language) {
