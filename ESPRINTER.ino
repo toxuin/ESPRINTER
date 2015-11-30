@@ -4,8 +4,11 @@
 #include <ESP8266WebServer.h>
 #include <EEPROM.h>
 #include <FS.h>
+#include <ESP8266SSDP.h>
 
-char ssid[32], pass[64];
+#define button_pin -1
+
+char ssid[32], pass[64], webhostname[64];
 MDNSResponder mdns;
 ESP8266WebServer server(80);
 WiFiServer tcp(23);
@@ -16,20 +19,41 @@ String fileUploading = "";
 String lastUploadedFile = "";
 
 void setup() {
+    
   Serial.begin(115200);
   delay(20);
   EEPROM.begin(512);
   delay(20);
 
+  Serial.println("M117 ESprinter");
+
+#if(button_pin!=-1)
+  pinMode(button_pin, INPUT);
+  if(digitalRead(button_pin)==0)
+  {//Clear wifi config
+    Serial.println("M117 WIFI ERASE");
+    EEPROM.put(0, "AAA");
+    EEPROM.put(32, "AAA");
+    EEPROM.commit();
+  }
+#endif
+
   EEPROM.get(0, ssid);
   EEPROM.get(32, pass);
+  EEPROM.get(32+64, webhostname);
 
   uint8_t failcount = 0;
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, pass);
+
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     failcount++;
+    if(failcount%2==0)
+    {
+      Serial.println("M117 WAIT WIFI "+String(25-(failcount/2)));
+    }
+    
     if (failcount > 50) { // 1 min
       Serial.println("M117 WIFI ERROR");
       WiFi.mode(WIFI_STA);
@@ -42,7 +66,8 @@ void setup() {
       for (uint8_t i = 0; i < num_ssids; i++) {
          wifiConfigHtml += "<input type=\"radio\" id=\"" + WiFi.SSID(i) + "\"name=\"ssid\" value=\"" + WiFi.SSID(i) + "\" /><label for=\"" + WiFi.SSID(i) + "\">" + WiFi.SSID(i) + "</label><br />";
       }
-      wifiConfigHtml += F("<input type=\"password\" name=\"password\" /><br /><input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
+      wifiConfigHtml += F("<input type=\"password\" name=\"password\" /><br />");
+      wifiConfigHtml += F("<input type=\"text\" name=\"webhostname\" value=\"esprinter\"/><br /><input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
 
       Serial.println("M117 FOUND " + String(num_ssids) + " WIFI");
 
@@ -70,10 +95,12 @@ void setup() {
           urldecode(argument);
           if (server.argName(e) == "password") argument.toCharArray(pass, 64);//pass = server.arg(e);
           else if (server.argName(e) == "ssid") argument.toCharArray(ssid, 32);//ssid = server.arg(e);
+          else if (server.argName(e) == "webhostname") argument.toCharArray(webhostname, 64);//ssid = server.arg(e);
         }
         
         EEPROM.put(0, ssid);
         EEPROM.put(32, pass);
+        EEPROM.put(32+64, webhostname);
         EEPROM.commit();
         server.send(200, "text/html", F("<h1>All set!</h1><br /><p>(Please reboot me.)</p>"));
         Serial.println("M117 SSID: " + String(ssid) + ", PASS: " + String(pass));
@@ -90,10 +117,17 @@ void setup() {
     }
   }
 
-  if (mdns.begin("esprinter", WiFi.localIP())) {
+  if (mdns.begin(webhostname, WiFi.localIP())) {
     MDNS.addService("http", "tcp", 80);
   }
-
+    
+  SSDP.setSchemaURL("description.xml");
+  SSDP.setHTTPPort(80);
+  SSDP.setName(webhostname);
+  SSDP.setSerialNumber(WiFi.macAddress());
+  SSDP.setURL("index.html");
+  SSDP.begin();
+    
   SPIFFS.begin();
 
   server.onNotFound(fsHandler);
@@ -111,7 +145,10 @@ void setup() {
   server.on("/rr_delete", handleDelete);
   server.on("/rr_fileinfo", handleFileinfo);
   server.on("/rr_mkdir", handleMkdir);
-  
+  server.on("/description.xml", HTTP_GET, [](){SSDP.schema(server.client());});
+
+  Serial.println("M117 " + WiFi.localIP().toString());
+
   // UNSUPPORTED STUFF
   server.on("/rr_move", handleUnsupported);
   server.begin();
@@ -192,7 +229,6 @@ void fsHandler() {
 void handleConnect() {
   // ALL PASSWORDS ARE VALID! YAY!
   // TODO: NO, SERIOUSLY, CONSIDER ADDING AUTH HERE. LATER MB?
-  Serial.println("M117 " + WiFi.localIP().toString());
   server.send(200, "application/json", "{\"err\":0}");
 }
 
