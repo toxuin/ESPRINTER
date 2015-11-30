@@ -8,7 +8,7 @@
 
 #define button_pin -1
 
-char ssid[32], pass[64]={0}, printername[64]={"ESprinter"};
+char ssid[32], pass[64], printername[64];
 MDNSResponder mdns;
 ESP8266WebServer server(80);
 WiFiServer tcp(23);
