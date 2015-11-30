@@ -8,7 +8,7 @@
 
 #define button_pin -1
 
-char ssid[32], pass[64], printername[64];
+char ssid[32], pass[64], webhostname[64];
 MDNSResponder mdns;
 ESP8266WebServer server(80);
 WiFiServer tcp(23);
@@ -40,7 +40,7 @@ void setup() {
 
   EEPROM.get(0, ssid);
   EEPROM.get(32, pass);
-  EEPROM.get(64, printername);
+  EEPROM.get(32+64, webhostname);
 
   uint8_t failcount = 0;
   WiFi.mode(WIFI_STA);
@@ -67,7 +67,7 @@ void setup() {
          wifiConfigHtml += "<input type=\"radio\" id=\"" + WiFi.SSID(i) + "\"name=\"ssid\" value=\"" + WiFi.SSID(i) + "\" /><label for=\"" + WiFi.SSID(i) + "\">" + WiFi.SSID(i) + "</label><br />";
       }
       wifiConfigHtml += F("<input type=\"password\" name=\"password\" /><br />");
-      wifiConfigHtml += F("<input type=\"text\" name=\"printername\" value=\"esprinter\"/><br /><input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
+      wifiConfigHtml += F("<input type=\"text\" name=\"webhostname\" value=\"esprinter\"/><br /><input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
 
       Serial.println("M117 FOUND " + String(num_ssids) + " WIFI");
 
@@ -95,12 +95,12 @@ void setup() {
           urldecode(argument);
           if (server.argName(e) == "password") argument.toCharArray(pass, 64);//pass = server.arg(e);
           else if (server.argName(e) == "ssid") argument.toCharArray(ssid, 32);//ssid = server.arg(e);
-          else if (server.argName(e) == "printername") argument.toCharArray(printername, 64);//ssid = server.arg(e);
+          else if (server.argName(e) == "webhostname") argument.toCharArray(webhostname, 64);//ssid = server.arg(e);
         }
         
         EEPROM.put(0, ssid);
         EEPROM.put(32, pass);
-        EEPROM.put(64, printername);
+        EEPROM.put(32+64, webhostname);
         EEPROM.commit();
         server.send(200, "text/html", F("<h1>All set!</h1><br /><p>(Please reboot me.)</p>"));
         Serial.println("M117 SSID: " + String(ssid) + ", PASS: " + String(pass));
@@ -117,13 +117,13 @@ void setup() {
     }
   }
 
-  if (mdns.begin(printername, WiFi.localIP())) {
+  if (mdns.begin(webhostname, WiFi.localIP())) {
     MDNS.addService("http", "tcp", 80);
   }
     
   SSDP.setSchemaURL("description.xml");
   SSDP.setHTTPPort(80);
-  SSDP.setName(printername);
+  SSDP.setName(webhostname);
   SSDP.setSerialNumber(WiFi.macAddress());
   SSDP.setURL("index.html");
   SSDP.begin();
