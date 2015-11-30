@@ -1063,24 +1063,33 @@
 														<td id="web_version">HTML: 1.06</td>
 													</tr>
 												</table>
-												<span id="copyright">Web Interface by Christian Hammacher<br/>ESP8266 port by Tony Bukreev</br>Licensed under the terms of the <a href="http://www.gnu.org/licenses/gpl-2.0.html" target="blank">GPL v2</a></span>
+
+												<div class="btn-group" role="group">
+													<button class="btn btn-info btn-fwupdate disabled" title="Check if your ESP8266 module has a firmware update available (must be on a network with Internet connection)" data-style="btn-info"><span class="glyphicon glyphicon-refresh"></span>  Check for module FW update...</button>
+												  	<button type="button" class="btn btn-default" data-toggle="collapse" data-target="#updaterSettings"><span class="glyphicon glyphicon-cog"></span></button>
+												</div>
+
+											    <div id="updaterSettings" class="collapse">
+													<label for="updServer">Update server:</label><input type="text" id="updServer" class="form-control" name="updServer" value="toxuin.ddns.net"><br />
+  												  	<label for="updUrl">Update url:</label><input type="text" id="updUrl" class="form-control" name="updUrl" value="/esp_updater.php">
+										     	</div>
+
+												<div>
+													<p></p>
+													<p><span id="copyright">Web Interface by Christian Hammacher<br/>Licensed under the terms of the <a href="http://www.gnu.org/licenses/gpl-2.0.html" target="blank">GPL v2</a></span></p>
+												</div>
 											</div>
 										</div>
 									</div>
 
 									<div class="panel panel-default hidden-xs hidden-sm">
 										<div class="panel-heading">
-											<span>Check for ESPrinter firmware update</span>
+											<span>File Upload for /sys and /www Directories</span>
 										</div>
 										<div class="panel-body">
 											<div class="btn-group-justified">
 												<div class="btn-group">
-													<form>
-														<label for="updServer">Update server:</label><input type="text" id="updServer" name="updServer" value="toxuin.ddns.net"><br />
-														<label for="updUrl">Update url:</label><input type="text" id="updUrl" name="updUrl" value="/esp_updater.php"><br />
-													</form>
-													<button class="btn btn-lg btn-info btn-fwupdate disabled" title="Check if your ESP8266 module has a firmware update available (must be on a network with Internet connection)" data-style="btn-info">
-														<span class="glyphicon glyphicon-cloud-upload"></span>  Check for module FW update...</button>
+													<button class="btn btn-lg btn-info btn-upload disabled" title="Upload one or more files to the /sys or /www directory (drag&amp;drop is supported as well)" data-type="generic" data-style="btn-info"><span class="glyphicon glyphicon-cloud-upload"></span>  Upload File(s)</button>
 												</div>
 											</div>
 										</div>

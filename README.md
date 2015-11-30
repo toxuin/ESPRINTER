@@ -3,7 +3,7 @@
 
 This one nifty tool lets you use awesome web panel from Duet electronics on any other hardware that supports auxiliary serial connections.
 
-Supported firmwares are [RepRapFirmware](https://github.com/dc42/RepRapFirmware) and toxuin's fork of [Repetier-Firmware](https://github.com/toxuin/Repetier-Firmware) (pull request submitted).
+Supported firmwares are [RepRapFirmware](https://github.com/dc42/RepRapFirmware) and dev version of [Repetier-Firmware](https://github.com/repetier/Repetier-Firmware/tree/work092).
 
 Anyways, it was tested with RAMPS 1.4 and RADDS and it mostly works. Use at own risk.
 
