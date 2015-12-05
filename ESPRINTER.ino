@@ -6,7 +6,8 @@
 #include <FS.h>
 #include <ESP8266SSDP.h>
 
-#define button_pin -1
+#define BUTTON_PIN -1
+#define MAX_WIFI_FAIL 50
 
 char ssid[32], pass[64], webhostname[64];
 MDNSResponder mdns;
@@ -19,18 +20,14 @@ String fileUploading = "";
 String lastUploadedFile = "";
 
 void setup() {
-    
   Serial.begin(115200);
   delay(20);
   EEPROM.begin(512);
   delay(20);
-
-  Serial.println("M117 ESprinter");
-
-#if(button_pin!=-1)
-  pinMode(button_pin, INPUT);
-  if(digitalRead(button_pin)==0)
-  {//Clear wifi config
+  
+#if (BUTTON_PIN != -1)
+  pinMode(BUTTON_PIN, INPUT);
+  if (digitalRead(button_pin) == 0) { // Clear wifi config
     Serial.println("M117 WIFI ERASE");
     EEPROM.put(0, "AAA");
     EEPROM.put(32, "AAA");
@@ -49,12 +46,11 @@ void setup() {
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     failcount++;
-    if(failcount%2==0)
-    {
-      Serial.println("M117 WAIT WIFI "+String(25-(failcount/2)));
+    if (failcount % 2 == 0) {
+      Serial.println("M117 WAIT WIFI " + String(MAX_WIFI_FAIL/2 - (failcount/2)));
     }
     
-    if (failcount > 50) { // 1 min
+    if (failcount > MAX_WIFI_FAIL) { // 1 min
       Serial.println("M117 WIFI ERROR");
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
@@ -67,7 +63,9 @@ void setup() {
          wifiConfigHtml += "<input type=\"radio\" id=\"" + WiFi.SSID(i) + "\"name=\"ssid\" value=\"" + WiFi.SSID(i) + "\" /><label for=\"" + WiFi.SSID(i) + "\">" + WiFi.SSID(i) + "</label><br />";
       }
       wifiConfigHtml += F("<input type=\"password\" name=\"password\" /><br />");
-      wifiConfigHtml += F("<input type=\"text\" name=\"webhostname\" value=\"esprinter\"/><br /><input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
+      wifiConfigHtml += F("<label for=\"webhostname\">ESPrinter Hostname: </label><input type=\"text\" id=\"webhostname\" name=\"webhostname\" value=\"esprinter\"/><br />");
+      wifiConfigHtml += F("<i>(This would allow you to access your printer by name instead of IP address. I.e. http://esprinter.local/)</i>");
+      wifiConfigHtml += F("<input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
 
       Serial.println("M117 FOUND " + String(num_ssids) + " WIFI");
 
@@ -238,11 +236,8 @@ void handleDisconnect() {
 }
 
 void handleStatus() {
-  uint8_t type = 1;
-  if (server.args() > 0) {
-    type = atoi(server.arg(0).c_str());
-  }
-  Serial.println("M408 S" + String(type));
+  String type = (server.args() < 1) ? "1" : server.arg(0);
+  Serial.println("M408 S" + type);
   Serial.setTimeout(5000); // 2s
   serialData = Serial.readStringUntil('\n');
   if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
