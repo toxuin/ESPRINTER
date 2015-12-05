@@ -1859,13 +1859,12 @@ $(".btn-upload").click(function(e) {
 
 $(".btn-fwupdate").click(function(e) {
 	showConfirmationDialog(T("Update firmware?"), T("Are you sure you want to update firmware? Will you able to manually reflash module if something goes wrong?"), function() {
-		var updateServer = $("updServer").val();
 		var updateUrl = $("updUrl").val();
-		if (updateUrl === "" || updateServer === "") {
-			showMessage("exclamation-sign", T("Error"), T("Your update server and/or URL seems to be empty."), "md");
+		if (updateUrl === "") {
+			showMessage("exclamation-sign", T("Error"), T("Your update server URL seems to be empty."), "md");
 			return;
 		}
-		$.ajax("rr_update?server=" + encodeURIComponent(updateServer) + "&url=" + encodeURIComponent(updateUrl), {
+		$.ajax("rr_update?url=" + encodeURIComponent(updateUrl), {
 			dataType: "json",
 			success: function(response) {
 				if (response.err == 0) {

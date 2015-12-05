@@ -2,6 +2,7 @@
 #include <ESP8266mDNS.h>
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
+#include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
 #include <ESP8266HTTPUpdateServer.h>
 #include <EEPROM.h>
@@ -433,32 +434,36 @@ void handleMkdir() {
 
 
 void handleRemoteUpdate() {
-  if (server.args() < 2) {
-    server.send(500, F("application/json"), F("{\"err\":\"ERROR 500: wrong update server provided\"}"));
+  if (server.args() < 1) {
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), F("{\"err\":\"ERROR 500: wrong update server provided\"}"));
     return;
   }
-  String updateServer = server.arg(0);
   String updateUrl = server.arg(1);
   urldecode(updateUrl); // ??
-  urldecode(updateServer); // ??
-  if (updateServer == "" || updateUrl == "") {
-    server.send(500, F("application/json"), F("{\"err\":\"ERROR 500: wrong update server provided\"}"));
+  if (updateUrl == "") {
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), F("{\"err\":\"ERROR 500: wrong update server provided\"}"));
     return;
   }
-  t_httpUpdate_return updateResult = ESPhttpUpdate.update(updateServer, 80, updateUrl, ESPRINTER_VERSION);
+  t_httpUpdate_return updateResult = ESPhttpUpdate.update(updateUrl.c_str(), ESPRINTER_VERSION, "");
   switch (updateResult) {
     case HTTP_UPDATE_FAILED:
       Serial.println(F("M117 ESPRINTER UPDATE ERROR"));
-      server.send(500, F("application/json"), F("{\"err\": \"Update failed\"}"));
+      server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), F("{\"err\": \"Update failed\"}"));
       break;
 
     case HTTP_UPDATE_NO_UPDATES:
-      server.send(200, F("application/json"), F("{\"err\":\"No updates\"}"));
+      server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), F("{\"err\":\"No updates\"}"));
       break;
 
     case HTTP_UPDATE_OK:
-      Serial.println(F("M117 ESPRINTER UPDATED!"));
-      server.send(200, F("application/json"), F("{\"err\":0}"));
+      t_httpUpdate_return spiffsUpdateResult = ESPhttpUpdate.updateSpiffs(String(updateUrl + "?spiffs").c_str(), ESPRINTER_VERSION, "");
+      if (spiffsUpdateResult == HTTP_UPDATE_OK) {
+        Serial.println(F("M117 ESPRINTER UPDATED!"));
+        server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
+      } else {
+        Serial.println(F("M117 ESPRINTER SPIFFS ERROR"));
+        server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), F("{\"err\":\"SPIFFS update error!\"}"));
+      }
       break;
   }
 }
