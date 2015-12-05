@@ -1,6 +1,8 @@
 3D Printer ESP8266 Web Interface
 ================
 
+[![Join the chat at https://gitter.im/toxuin/ESPRINTER](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/toxuin/ESPRINTER?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 This one nifty tool lets you use awesome web panel from Duet electronics on any other hardware that supports auxiliary serial connections.
 
 Supported firmwares are [RepRapFirmware](https://github.com/dc42/RepRapFirmware) and toxuin's fork of [Repetier-Firmware](https://github.com/toxuin/Repetier-Firmware) (pull request submitted).
