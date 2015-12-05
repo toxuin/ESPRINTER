@@ -5,6 +5,7 @@
 #include <EEPROM.h>
 #include <FS.h>
 #include <ESP8266SSDP.h>
+#include "PooledStrings.cpp"
 
 #define BUTTON_PIN -1
 #define MAX_WIFI_FAIL 50
@@ -29,8 +30,8 @@ void setup() {
   pinMode(BUTTON_PIN, INPUT);
   if (digitalRead(button_pin) == 0) { // Clear wifi config
     Serial.println("M117 WIFI ERASE");
-    EEPROM.put(0, "AAA");
-    EEPROM.put(32, "AAA");
+    EEPROM.put(0, FPSTR(STR_EEPROM_DUMMY));
+    EEPROM.put(32, FPSTR(STR_EEPROM_DUMMY));
     EEPROM.commit();
   }
 #endif
@@ -80,12 +81,12 @@ void setup() {
       dns.start(53, "*", apIP);
 
       server.on("/", HTTP_GET, [&wifiConfigHtml]() {
-        server.send(200, "text/html", wifiConfigHtml);
+        server.send(200, FPSTR(STR_MIME_TEXT_HTML), wifiConfigHtml);
       });
 
       server.on("/", HTTP_POST, []() {
         if (server.args() <= 0) {
-          server.send(500, "text/plain", F("Got no data, go back and retry"));
+          server.send(500, FPSTR(STR_MIME_TEXT_PLAIN), F("Got no data, go back and retry"));
           return;
         }
         for (uint8_t e = 0; e < server.args(); e++) {
@@ -100,13 +101,14 @@ void setup() {
         EEPROM.put(32, pass);
         EEPROM.put(32+64, webhostname);
         EEPROM.commit();
-        server.send(200, "text/html", F("<h1>All set!</h1><br /><p>(Please reboot me.)</p>"));
+        server.send(200, FPSTR(STR_MIME_TEXT_HTML), F("<h1>All set!</h1><br /><p>(Please reboot me.)</p>"));
         Serial.println("M117 SSID: " + String(ssid) + ", PASS: " + String(pass));
         delay(50);
         ESP.restart();
       });
       server.begin();
-      Serial.println("M117 HTTP://" + WiFi.softAPIP().toString());
+      Serial.print(FPSTR(STR_M117));
+      Serial.println(WiFi.softAPIP().toString());
       for (;;) { // THIS ONE IS FOR WIFI AP SETTINGS PAGE
         server.handleClient();
         dns.processNextRequest();
@@ -145,7 +147,8 @@ void setup() {
   server.on("/rr_mkdir", handleMkdir);
   server.on("/description.xml", HTTP_GET, [](){SSDP.schema(server.client());});
 
-  Serial.println("M117 " + WiFi.localIP().toString());
+  Serial.print(FPSTR(STR_M117));
+  Serial.println(WiFi.localIP().toString());
 
   // UNSUPPORTED STUFF
   server.on("/rr_move", handleUnsupported);
@@ -161,7 +164,7 @@ void loop() {
   while (Serial.available() > 0) {
     char character = Serial.read();
     if (character == '\n' || character == '\r') {
-      if (serialData.startsWith("ok")) {
+      if (serialData.startsWith(FPSTR(STR_OK))) {
           serialData = "";
           continue;
       }
@@ -203,13 +206,13 @@ void fsHandler() {
   if (path.endsWith("/")) path += F("index.html");
   File dataFile = SPIFFS.open(path, "r");
   if (!dataFile) {
-    send404();
+    server.send(404, FPSTR(STR_MIME_APPLICATION_JSON), "{\"err\": \"404: " + server.uri() + " NOT FOUND\"}");
     return;
   }
-  server.sendHeader("Content-Length", String(dataFile.size()));
-  String dataType = "text/plain";
+  server.sendHeader(FPSTR(STR_CONTENT_LENGTH), String(dataFile.size()));
+  String dataType = FPSTR(STR_MIME_TEXT_PLAIN);
   //if (path.endsWith(".gz")) server.sendHeader(F("Content-Encoding"), "gzip");
-  if (path.endsWith(".html")) dataType = F("text/html");
+  if (path.endsWith(".html")) dataType = FPSTR(STR_MIME_TEXT_HTML);
   else if (path.endsWith(".css")) dataType = F("text/css");
   else if (path.endsWith(".js")) dataType = F("application/javascript");
   else if (path.endsWith(".js.gz")) dataType = F("application/javascript");
@@ -227,26 +230,27 @@ void fsHandler() {
 void handleConnect() {
   // ALL PASSWORDS ARE VALID! YAY!
   // TODO: NO, SERIOUSLY, CONSIDER ADDING AUTH HERE. LATER MB?
-  server.send(200, "application/json", "{\"err\":0}");
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleDisconnect() {
   // TODO: DEAUTH?..
-  server.send(200, F("application/json"), F("{\"err\":0}"));
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleStatus() {
   String type = (server.args() < 1) ? "1" : server.arg(0);
-  Serial.println("M408 S" + type);
+  Serial.print(FPSTR(STR_M408_S));
+  Serial.println(type);
   Serial.setTimeout(5000); // 2s
   serialData = Serial.readStringUntil('\n');
-  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith(FPSTR(STR_OK))) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
-  server.send(200, F("application/json"), lastResponse);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), lastResponse);
 }
 
 void handleReply() {
-  server.send(200, F("text/plain"), lastResponse);
+  server.send(200, FPSTR(STR_MIME_TEXT_PLAIN), lastResponse);
 }
 
 void handleFiles() {
@@ -255,12 +259,13 @@ void handleFiles() {
     dir = server.arg(0);
   }
   urldecode(dir);
-  Serial.println("M20 S2 P" + dir);
+  Serial.print(FPSTR(STR_M20_S2_P));
+  Serial.println(dir);
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
-  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith(FPSTR(STR_OK))) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
-  server.send(200, "application/json", lastResponse);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), lastResponse);
 }
 
 void handleGcode() {
@@ -268,39 +273,40 @@ void handleGcode() {
   if (server.args() > 0) {
     gcode = server.arg(0);
   } else {
-    server.send(500, "application/json", "{\"err\":\"ERROR 500: EMPTY COMMAND\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_EMPTY_COMMAND));
     return;
   }
   urldecode(gcode);
   Serial.println(gcode);
-  server.send(200, "application/json", F("{\"buff\": 16}"));
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_BUFF_16));
 }
 
 void handleConfig() {
-  Serial.println(F("M408 S5"));
+  Serial.print(FPSTR(STR_M408_S));
+  Serial.println('5');
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
-  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith(FPSTR(STR_OK))) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
-  server.send(200, "application/json", lastResponse);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), lastResponse);
 }
 
 void handleUploadStart() {
   if (server.args() > 0) {
     fileUploading = server.arg(0);
   } else {
-    server.send(500, "application/json", "{\"err\":\"ERROR 500: PLEASE SPECIFY FILENAME\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_NO_FILENAME_PROVIDED));
     return;
   }
   bool compat = false;
   if (server.args() > 1) {
-    compat = (server.arg(1) == "true");
+    compat = (server.arg(1) == FPSTR(STR_TRUE));
   }
   urldecode(fileUploading);
   lastUploadedFile = fileUploading;
   // TODO: CHECK FOR VALID SERVER RESPONSE!!!! IMPORTANT!
   if (!compat) {
-    Serial.println("M575 P1 B460800 S0"); // CHANGE BAUDRATE ON 3DPRINTER
+    Serial.println(FPSTR(STR_M575_P1_B460800_S0)); // CHANGE BAUDRATE ON 3DPRINTER
     Serial.flush();
     delay(200);
     Serial.end();
@@ -309,41 +315,43 @@ void handleUploadStart() {
     delay(200);
     Serial.flush();
   }
-  Serial.println("M28 " + fileUploading);
+  Serial.print(FPSTR(STR_M28));
+  Serial.println(fileUploading);
   Serial.flush();
-  server.send(200, "application/json", "{\"err\":0}");
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleUploadData() {
   if (fileUploading == "") {
-    server.send(500, "application/json", "{\"err\":\"ERROR 500: NOT UPLOADING FILES!\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_NOT_UPLOADING_FILES));
     return;
   }
   String data = "";
   if (server.args() > 0) {
     data = server.arg(0);
   } else {
-    server.send(500, "application/json", "{\"err\":\"ERROR 500: NO DATA RECEIVED\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_NO_DATA_RECEIVED));
     return;
   }
   urldecode(data);
   Serial.println(data);
   Serial.flush();
-  server.send(200, "application/json", "{\"err\":0}");
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleUploadEnd() {
   if (fileUploading == "") {
-    server.send(500, "application/json", "{\"err\": \"ERROR 500: NOT UPLOADING ANY FILES\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_NOT_UPLOADING_FILES));
     return;
   }
   bool compat = false;
   if (server.args() > 0) {
-    compat = (server.arg(0) == "true");
+    compat = (server.arg(0) == FPSTR(STR_TRUE));
   }
-  Serial.println("M29 " + fileUploading);
+  Serial.print(FPSTR(STR_M29));
+  Serial.println(fileUploading);
   if (!compat) {
-    Serial.println("M575 P1 B115200 S0"); // CHANGE BAUDRATE ON 3DPRINTER
+    Serial.println(FPSTR(STR_M575_P1_B115200_S0)); // CHANGE BAUDRATE ON 3DPRINTER
     Serial.flush();
     delay(200);
     Serial.end();
@@ -353,13 +361,14 @@ void handleUploadEnd() {
     Serial.flush();
   }
   fileUploading = "";
-  server.send(200, "application/json", "{\"err\":0}");
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleUploadCancel() {
   // IS SENT AFTER UPLOAD END
-  Serial.println("M30 " + lastUploadedFile);
-  server.send(200, "application/json", "{\"err\":0}");
+  Serial.print(FPSTR(STR_M30));
+  Serial.println(lastUploadedFile);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleDelete() {
@@ -367,12 +376,13 @@ void handleDelete() {
   if (server.args() > 0) {
     fileName = server.arg(0);
   } else {
-    server.send(500, "application/json", "{\"err\": \"ERROR 500: NO FILENAME PROVIDED\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_NO_FILENAME_PROVIDED));
     return;
   }
   urldecode(fileName);
-  Serial.println("M30 " + fileName);
-  server.send(200, "application/json", "{\"err\":0}");
+  Serial.print(FPSTR(STR_M30));
+  Serial.println(fileName);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 void handleFileinfo() {
@@ -381,32 +391,34 @@ void handleFileinfo() {
     fileName = server.arg(0);
     urldecode(fileName);
   }
+  Serial.print(FPSTR(STR_M36));
   if (fileName == "") {
-    Serial.println("M36");
+    Serial.println();
   } else {
-    Serial.println("M36 " + fileName);
+    Serial.println(fileName);
   }
   Serial.setTimeout(5000);
   serialData = Serial.readStringUntil('\n');
-  if (serialData.startsWith("ok")) serialData = Serial.readStringUntil('\n');
+  if (serialData.startsWith(FPSTR(STR_OK))) serialData = Serial.readStringUntil('\n');
   lastResponse = String(serialData);
-  server.send(200, "application/json", lastResponse);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), lastResponse);
 }
 
 void handleMkdir() {
   String dirName = "";
-  if (server.args() < 2 || server.arg(1) != "true") { // 2 ARGS FOR COMPATMODE OR NOPE
-    server.send(200, "application/json", F("{\"err\":\"Unsupported operation :(\"}"));
+  if (server.args() < 2 || server.arg(1) != FPSTR(STR_TRUE)) { // 2 ARGS FOR COMPATMODE OR NOPE
+    server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_UNSUPPORTED_OPERATION));
     return;
   }
   dirName = server.arg(0);
   urldecode(dirName);
   if (dirName == "") {
-    server.send(500, "application/json", "{\"err\":\"ERROR 500: NO DIR NAME PROVIDED\"}");
+    server.send(500, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_500_NO_DIR_NAME_PROVIDED));
     return;
   }
-  Serial.println("M32 " + dirName);
-  server.send(200, "application/json", "{\"err\":0}");
+  Serial.print(FPSTR(STR_M32));
+  Serial.println(dirName);
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
 
@@ -414,26 +426,7 @@ void handleMkdir() {
 
 
 void handleUnsupported() {
-  server.send(200, "application/json", F("{\"err\":\"Unsupported operation :(\"}"));
-}
-
-void send404() {
-  /*Serial.print("ERROR 404:");
-  Serial.print((server.method() == HTTP_GET) ? " GET " : " POST ");
-  Serial.print(server.uri() + ", ");
-  if (server.args() > 0) {
-    Serial.print("arguments:");
-    for (uint8_t i=0; i<server.args(); i++) {
-      Serial.print(" " + server.argName(i) + ": " + server.arg(i) + ", ");
-    }
-  }
-  Serial.println("\n");
-  */
-  server.send(404, "application/json", "{\"err\": \"404: " + server.uri() + " NOT FOUND\"}");
-}
-
-void send500(String errorMessage) {
-  server.send(500, "application/json", "{\"err\": \"500: " + errorMessage + "\"}");
+  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_UNSUPPORTED_OPERATION));
 }
 
 void urldecode(String &input) { // LAL ^_^
