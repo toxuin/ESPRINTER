@@ -1,5 +1,6 @@
 #include <pgmspace.h>
 const char STR_EEPROM_DUMMY[] PROGMEM = "AAA";
+const char STR_EEPROM_DEFAULT_WEBPASSWORD[] PROGMEM = "reprap";
 const char STR_MIME_TEXT_HTML[] PROGMEM = "text/html";
 const char STR_MIME_TEXT_PLAIN[] PROGMEM = "text/plain";
 const char STR_MIME_APPLICATION_JSON[] PROGMEM = "application/json";
