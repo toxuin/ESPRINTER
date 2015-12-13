@@ -734,6 +734,10 @@ function updateGCodeFiles() {
 			dataType: "json",
 			success: function(response) {
 				if (isConnected) {
+					if (response.err !== 0) { // NO SD CARD INSERTED?
+						updateGCodeFiles();
+						return;
+					}
 					knownGCodeFiles = response.files.sort(function (a, b) {
 						return a.toLowerCase().localeCompare(b.toLowerCase());
 					});
@@ -797,6 +801,10 @@ function updateMacroFiles() {
 			dataType: "json",
 			success: function(response) {
 				if (isConnected) {
+					if (response.err !== 0) { // NO SD CARD INSERTED?
+						updateMacroFiles();
+						return;
+					}
 					knownMacroFiles = response.files.sort(function (a, b) {
 						return a.toLowerCase().localeCompare(b.toLowerCase());
 					});

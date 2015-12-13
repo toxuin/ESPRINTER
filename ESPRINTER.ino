@@ -9,8 +9,11 @@
 
 #define BUTTON_PIN -1
 #define MAX_WIFI_FAIL 50
+#define MAX_LOGGED_IN_CLIENTS 3
 
-char ssid[32], pass[64], webhostname[64];
+char ssid[32], pass[64], webhostname[64], webpassword[32];
+IPAddress sessions[MAX_LOGGED_IN_CLIENTS];
+uint8_t loggedInClientsNum = 0;
 MDNSResponder mdns;
 ESP8266WebServer server(80);
 WiFiServer tcp(23);
@@ -26,12 +29,13 @@ void setup() {
   EEPROM.begin(512);
   delay(20);
   
-#if (BUTTON_PIN != -1)
-  pinMode(BUTTON_PIN, INPUT);
-  if (digitalRead(button_pin) == 0) { // Clear wifi config
-    Serial.println("M117 WIFI ERASE");
+#if (BUTTON_PIN > -1)
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  if (digitalRead(BUTTON_PIN) == LOW) { // Clear wifi config
+    Serial.println("M117 ESPRINTER ERASE");
     EEPROM.put(0, FPSTR(STR_EEPROM_DUMMY));
     EEPROM.put(32, FPSTR(STR_EEPROM_DUMMY));
+    EEPROM.put(32+64+64, FPSTR(STR_EEPROM_DEFAULT_WEBPASSWORD));
     EEPROM.commit();
   }
 #endif
@@ -39,6 +43,7 @@ void setup() {
   EEPROM.get(0, ssid);
   EEPROM.get(32, pass);
   EEPROM.get(32+64, webhostname);
+  EEPROM.get(32+64+64, webpassword);
 
   uint8_t failcount = 0;
   WiFi.mode(WIFI_STA);
@@ -63,9 +68,11 @@ void setup() {
       for (uint8_t i = 0; i < num_ssids; i++) {
          wifiConfigHtml += "<input type=\"radio\" id=\"" + WiFi.SSID(i) + "\"name=\"ssid\" value=\"" + WiFi.SSID(i) + "\" /><label for=\"" + WiFi.SSID(i) + "\">" + WiFi.SSID(i) + "</label><br />";
       }
-      wifiConfigHtml += F("<input type=\"password\" name=\"password\" /><br />");
-      wifiConfigHtml += F("<label for=\"webhostname\">ESPrinter Hostname: </label><input type=\"text\" id=\"webhostname\" name=\"webhostname\" value=\"esprinter\"/><br />");
-      wifiConfigHtml += F("<i>(This would allow you to access your printer by name instead of IP address. I.e. http://esprinter.local/)</i>");
+      wifiConfigHtml += F("<label for=\"password\">WiFi Password:</label><input type=\"password\" id=\"password\" name=\"password\" /><br />");
+      wifiConfigHtml += F("<p><label for=\"webhostname\">ESPrinter Hostname: </label><input type=\"text\" id=\"webhostname\" name=\"webhostname\" value=\"esprinter\"/><br />");
+      wifiConfigHtml += F("<i>(This would allow you to access your printer by name instead of IP address. I.e. http://esprinter.local/)</i></p>");
+      wifiConfigHtml += F("<p><label for=\"webpassword\">Web Password:</label><input type=\"password\" id=\"webpassword\" name=\"webpassword\"><br />");
+      wifiConfigHtml += F("<i>(This is the password for logging into the web interface. Default: \"reprap\")</i></p>");
       wifiConfigHtml += F("<input type=\"submit\" value=\"Save and reboot\" /></form></body></html>");
 
       Serial.println("M117 FOUND " + String(num_ssids) + " WIFI");
@@ -94,12 +101,14 @@ void setup() {
           urldecode(argument);
           if (server.argName(e) == "password") argument.toCharArray(pass, 64);//pass = server.arg(e);
           else if (server.argName(e) == "ssid") argument.toCharArray(ssid, 32);//ssid = server.arg(e);
-          else if (server.argName(e) == "webhostname") argument.toCharArray(webhostname, 64);//ssid = server.arg(e);
+          else if (server.argName(e) == "webhostname") argument.toCharArray(webhostname, 64);
+          else if (server.argName(e) == "webpassword") argument.toCharArray(webpassword, 32);
         }
-        
+        if (String(webpassword) == "") snprintf(webpassword, 32, "%s", FPSTR(STR_EEPROM_DEFAULT_WEBPASSWORD));
         EEPROM.put(0, ssid);
         EEPROM.put(32, pass);
         EEPROM.put(32+64, webhostname);
+        EEPROM.put(32+64+64, webpassword);
         EEPROM.commit();
         server.send(200, FPSTR(STR_MIME_TEXT_HTML), F("<h1>All set!</h1><br /><p>(Please reboot me.)</p>"));
         Serial.println("M117 SSID: " + String(ssid) + ", PASS: " + String(pass));
@@ -228,13 +237,25 @@ void fsHandler() {
 
 
 void handleConnect() {
-  // ALL PASSWORDS ARE VALID! YAY!
-  // TODO: NO, SERIOUSLY, CONSIDER ADDING AUTH HERE. LATER MB?
-  server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
+  String password = "";
+  if (server.args() > 0) password = server.arg(0);
+  if (password == String(webpassword)) {
+    if (!logIn(server.client().remoteIP())) {
+      // FUBAR, JUST SEND 403
+      server.send(403, FPSTR(STR_MIME_APPLICATION_JSON), "{\"err\":\"403 NOT AUTHORISED\"}");
+      return;
+    }
+  }
+  if (isLoggedIn(server.client().remoteIP())) {
+    server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
+  } else {
+    // 403 WILL SHOW ERROR IN FROMTEND, BUT 200 WILL PROMPT FOR PASSWORD
+    server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), "{\"err\":\"WRONG PASSWORD\"}");
+  }
 }
 
 void handleDisconnect() {
-  // TODO: DEAUTH?..
+  logOut(server.client().remoteIP());
   server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_0));
 }
 
@@ -428,6 +449,38 @@ void handleMkdir() {
 void handleUnsupported() {
   server.send(200, FPSTR(STR_MIME_APPLICATION_JSON), FPSTR(STR_JSON_ERR_UNSUPPORTED_OPERATION));
 }
+
+bool isLoggedIn(IPAddress clientIP) {
+  for (int i = 0; i < loggedInClientsNum; i++) {
+    if (sessions[i] == clientIP) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool logIn(IPAddress clientIP) {
+  if (loggedInClientsNum < MAX_LOGGED_IN_CLIENTS) {
+    sessions[loggedInClientsNum] = clientIP;
+    loggedInClientsNum++;
+    return true;
+  }
+  return false;
+}
+
+void logOut(IPAddress clientIP) {
+  for (int i = 0; i < loggedInClientsNum; i++) {
+    if (sessions[i] == clientIP) {
+      for (int e = loggedInClientsNum - 1; e > i; e--) {
+        // SHIFT ARRAY
+        memcpy(&sessions[e - 1], &sessions[e], sizeof(IPAddress));
+      }
+      loggedInClientsNum--;
+      return;
+    }
+  }
+}
+
 
 void urldecode(String &input) { // LAL ^_^
   input.replace("%0A", String('\n'));
