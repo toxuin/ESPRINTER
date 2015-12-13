@@ -16,7 +16,7 @@ fs.writeFile("ugly.min.js", uglyjs.code, function(err) {
 
 var uglycss = uglifycss.processFiles(
     [ 'css/bootstrap-slider.min.css', 'css/bootstrap-theme.min.css', 'css/bootstrap.min.css',
-        'css/defaults.css'],
+        'css/defaults.css', 'css/slate.css'],
         { maxLineLen: 500, expandVars: true }
 );
 
